@@ -1,0 +1,83 @@
+# package pkl
+
+# import (
+# 	"context"
+# 	"errors"
+# 	"sync"
+# 	"testing"
+
+# 	"github.com/apple/pkl-go/pkl/internal/msgapi"
+# 	"github.com/stretchr/testify/assert"
+# )
+
+# type fakeEvaluatorImpl struct {
+# 	in      chan msgapi.IncomingMessage
+# 	out     chan msgapi.OutgoingMessage
+# 	version string
+# 	closed  chan error
+# }
+
+# func (f *fakeEvaluatorImpl) getVersion() (string, error) {
+# 	if f.version == "" {
+# 		return "0.23.2", nil
+# 	}
+# 	return f.version, nil
+# }
+
+# func (f *fakeEvaluatorImpl) init() error {
+# 	return nil
+# }
+
+# func (f *fakeEvaluatorImpl) deinit() error {
+# 	return nil
+# }
+
+# func (f *fakeEvaluatorImpl) inChan() chan msgapi.IncomingMessage {
+# 	return f.in
+# }
+
+# func (f *fakeEvaluatorImpl) outChan() chan msgapi.OutgoingMessage {
+# 	return f.out
+# }
+
+# func (f *fakeEvaluatorImpl) closedChan() chan error {
+# 	return f.closed
+# }
+
+# var _ evaluatorManagerImpl = (*fakeEvaluatorImpl)(nil)
+
+# func newFakeEvalautorManager() *evaluatorManager {
+# 	return &evaluatorManager{
+# 		impl: &fakeEvaluatorImpl{
+# 			in:     make(chan msgapi.IncomingMessage),
+# 			out:    make(chan msgapi.OutgoingMessage),
+# 			closed: make(chan error),
+# 		},
+# 		interrupts:        &sync.Map{},
+# 		evaluators:        &sync.Map{},
+# 		pendingEvaluators: &sync.Map{},
+# 	}
+# }
+
+# func TestEvaluatorManager_interrupt_NewEvaluator(t *testing.T) {
+# 	m := newFakeEvalautorManager()
+# 	defer assert.NoError(t, m.Close())
+# 	go m.listen()
+# 	go func() {
+# 		m.interrupt(errors.New("test interruption"))
+# 	}()
+# 	evaluator, err := m.NewEvaluator(context.Background())
+# 	assert.Nil(t, evaluator)
+# 	assert.Error(t, err, "test interruption")
+# }
+
+# func TestEvaluatorManager_interrupt_Close(t *testing.T) {
+# 	m := newFakeEvalautorManager()
+# 	go m.listen()
+# 	go func() {
+# 		_ = m.Close()
+# 	}()
+# 	evaluator, err := m.NewEvaluator(context.Background())
+# 	assert.Nil(t, evaluator)
+# 	assert.Nil(t, err)
+# }
