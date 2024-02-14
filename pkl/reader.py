@@ -120,3 +120,56 @@
 # 	// Read reads the string contents of this module.
 # 	Read(url url.URL) (string, error)
 # }
+
+
+import dataclasses
+
+
+class Reader:
+    def scheme(self) -> str:
+        raise NotImplementedError
+
+    def is_globbable(self) -> bool:
+        raise NotImplementedError
+
+    def has_hierarchical_uris(self) -> bool:
+        raise NotImplementedError
+
+    def list_elements(self, url: str) -> list["PathElement"]:
+        raise NotImplementedError
+
+
+class PathElement:
+    def name(self) -> str:
+        raise NotImplementedError
+
+    def is_directory(self) -> bool:
+        raise NotImplementedError
+
+
+class ResourceReader(Reader):
+    def read(self, url: str) -> bytes:
+        raise NotImplementedError
+
+
+class ModuleReader(Reader):
+    def is_local(self) -> bool:
+        raise NotImplementedError
+
+    def read(self, url: str) -> str:
+        raise NotImplementedError
+
+
+def new_path_element(name: str, is_directory: bool) -> PathElement:
+    @dataclasses.dataclass
+    class _PathElement(PathElement):
+        _name: str
+        _is_directory: bool
+
+        def name(self) -> str:
+            return self._name
+
+        def is_directory(self) -> bool:
+            return self._is_directory
+
+    return _PathElement(name, is_directory)

@@ -148,3 +148,146 @@
 # 	Name        string `msgpack:"name"`
 # 	IsDirectory bool   `msgpack:"isDirectory"`
 # }
+
+
+import dataclasses
+
+import umsgpack
+
+from pkl.internal.msgapi.code import (
+    CODE_CLOSE_EVALUATOR,
+    CODE_EVALUATE,
+    CODE_EVALUATE_READ_MODULE_RESPONSE,
+    CODE_EVALUATE_READ_RESPONSE,
+    CODE_LIST_MODULES_RESPONSE,
+    CODE_LIST_RESOURCES_RESPONSE,
+    CODE_NEW_EVALUATOR,
+)
+
+
+class OutgoingMessage:
+    def to_msg_pack(self) -> bytes:
+        raise NotImplementedError
+
+
+def pack_message(msg: OutgoingMessage, code: int) -> bytes:
+    return umsgpack.packb([code, msg], use_bin_type=True)
+
+
+@dataclasses.dataclass
+class ResourceReader:
+    scheme: str
+    has_hierarchical_uris: bool
+    is_globbable: bool
+
+
+@dataclasses.dataclass
+class ModuleReader:
+    scheme: str
+    has_hierarchical_uris: bool
+    is_globbable: bool
+    is_local: bool
+
+
+@dataclasses.dataclass
+class CreateEvaluator(OutgoingMessage):
+    resource_readers: list["ResourceReader"]
+    module_readers: list["ModuleReader"]
+    module_paths: list[str]
+    env: dict[str, str]
+    properties: dict[str, str]
+    output_format: str
+    allowed_modules: list[str]
+    allowed_resources: list[str]
+    root_dir: str
+    cache_dir: str
+    project: "ProjectOrDependency | None" = None
+    timeout_seconds: int | None = None
+    request_id: int | None = None
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_NEW_EVALUATOR)
+
+
+@dataclasses.dataclass
+class ProjectOrDependency:
+    package_uri: str | None = None
+    type: str | None = None
+    project_file_uri: str | None = None
+    checksums: "Checksums | None" = None
+    dependencies: dict[str, "ProjectOrDependency"] | None = None
+
+
+@dataclasses.dataclass
+class Checksums:
+    sha256: str
+
+
+@dataclasses.dataclass
+class CloseEvaluator(OutgoingMessage):
+    evaluator_id: int
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_CLOSE_EVALUATOR)
+
+
+@dataclasses.dataclass
+class Evaluate(OutgoingMessage):
+    request_id: int
+    evaluator_id: int
+    module_uri: str
+    module_text: str
+    expr: str
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_EVALUATE)
+
+
+@dataclasses.dataclass
+class ReadResourceResponse(OutgoingMessage):
+    request_id: int
+    evaluator_id: int
+    contents: bytes
+    error: str
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_EVALUATE_READ_RESPONSE)
+
+
+@dataclasses.dataclass
+class ReadModuleResponse(OutgoingMessage):
+    request_id: int
+    evaluator_id: int
+    contents: str
+    error: str
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_EVALUATE_READ_MODULE_RESPONSE)
+
+
+@dataclasses.dataclass
+class ListResourcesResponse(OutgoingMessage):
+    request_id: int
+    evaluator_id: int
+    path_elements: list["PathElement"]
+    error: str
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_LIST_RESOURCES_RESPONSE)
+
+
+@dataclasses.dataclass
+class ListModulesResponse(OutgoingMessage):
+    request_id: int
+    evaluator_id: int
+    path_elements: list["PathElement"]
+    error: str
+
+    def to_msg_pack(self) -> bytes:
+        return pack_message(self, CODE_LIST_MODULES_RESPONSE)
+
+
+@dataclasses.dataclass
+class PathElement:
+    name: str
+    is_directory: bool

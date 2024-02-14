@@ -10,3 +10,11 @@
 # func RegisterMapping(name string, value any) {
 # 	schemas[name] = reflect.TypeOf(value)
 # }
+
+from typing import Any
+
+schemas: dict[str, type] = {}
+
+
+def register_mapping(name: str, value: Any):
+    schemas[name] = type(value)

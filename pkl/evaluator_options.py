@@ -334,3 +334,237 @@
 # 	WithDefaultCacheDir(opts)
 # 	opts.Logger = NoopLogger
 # }
+
+import dataclasses
+import os
+
+from pkl.internal import msgapi
+from pkl.logger import Logger, noop_logger
+from pkl.project import Project
+from pkl.reader import ModuleReader, ResourceReader
+
+
+@dataclasses.dataclass
+class EvaluatorOptions:
+    properties: dict[str, str] = dataclasses.field(default_factory=dict)
+    env: dict[str, str] = dataclasses.field(default_factory=dict)
+    module_paths: list[str] = dataclasses.field(default_factory=list)
+    logger: "Logger" = noop_logger()
+    output_format: str = "pcf"
+    allowed_modules: list[str] = dataclasses.field(default_factory=list)
+    allowed_resources: list[str] = dataclasses.field(default_factory=list)
+    resource_readers: list["ResourceReader"] = dataclasses.field(default_factory=list)
+    module_readers: list["ModuleReader"] = dataclasses.field(default_factory=list)
+    cache_dir: str = ""
+    root_dir: str = ""
+    project_dir: str = ""
+    declared_project_dependencies: "ProjectDependencies | None" = None
+
+    def to_message(self) -> msgapi.CreateEvaluator:
+        resource_readers = [
+            msgapi.ResourceReader(
+                scheme=reader.scheme(),
+                is_globbable=reader.is_globbable(),
+                has_hierarchical_uris=reader.has_hierarchical_uris(),
+            )
+            for reader in self.resource_readers
+        ]
+        module_readers = [
+            msgapi.ModuleReader(
+                scheme=reader.scheme(),
+                is_globbable=reader.is_globbable(),
+                has_hierarchical_uris=reader.has_hierarchical_uris(),
+                is_local=reader.is_local(),
+            )
+            for reader in self.module_readers
+        ]
+        return msgapi.CreateEvaluator(
+            resource_readers=resource_readers,
+            module_readers=module_readers,
+            env=self.env,
+            properties=self.properties,
+            module_paths=self.module_paths,
+            allowed_modules=self.allowed_modules,
+            allowed_resources=self.allowed_resources,
+            cache_dir=self.cache_dir,
+            output_format=self.output_format,
+            root_dir=self.root_dir,
+            project=self.project(),
+        )
+
+    def project(self):
+        if not self.project_dir:
+            return None
+        return msgapi.ProjectOrDependency(
+            project_file_uri=f"file://{self.project_dir}/PklProject",
+            dependencies=self.declared_project_dependencies.to_message()
+            if self.declared_project_dependencies
+            else None,
+        )
+
+
+@dataclasses.dataclass
+class ProjectRemoteDependency:
+    package_uri: str
+    checksums: "Checksums"
+
+    def to_message(self) -> msgapi.ProjectOrDependency:
+        return msgapi.ProjectOrDependency(
+            package_uri=self.package_uri,
+            checksums=self.checksums.to_message(),
+            type="remote",
+        )
+
+
+@dataclasses.dataclass
+class Checksums:
+    sha256: str
+
+    def to_message(self) -> msgapi.Checksums:
+        return msgapi.Checksums(sha256=self.sha256)
+
+
+@dataclasses.dataclass
+class ProjectLocalDependency:
+    package_uri: str
+    project_file_uri: str
+    dependencies: "ProjectDependencies"
+
+    def to_message(self) -> msgapi.ProjectOrDependency:
+        return msgapi.ProjectOrDependency(
+            package_uri=self.package_uri,
+            project_file_uri=self.project_file_uri,
+            type="local",
+            dependencies=self.dependencies.to_message(),
+        )
+
+
+@dataclasses.dataclass
+class ProjectDependencies:
+    local_dependencies: dict[str, ProjectLocalDependency]
+    remote_dependencies: dict[str, ProjectRemoteDependency]
+
+    def to_message(self) -> dict[str, msgapi.ProjectOrDependency]:
+        return {
+            name: dep.to_message() for name, dep in self.local_dependencies.items()
+        } | {name: dep.to_message() for name, dep in self.remote_dependencies.items()}
+
+
+def with_os_env(opts: EvaluatorOptions):
+    if not opts.env:
+        opts.env = {}
+    for e in os.environ:
+        if i := e.find("="):
+            opts.env[e[:i]] = e[i + 1 :]
+
+
+def build_evaluator_options(*fns) -> EvaluatorOptions:
+    o = EvaluatorOptions()
+    for f in fns:
+        f(o)
+    o.allowed_modules.append("repl:text")
+    return o
+
+
+def with_default_allowed_resources(opts: EvaluatorOptions):
+    opts.allowed_resources.extend(
+        [
+            "http:",
+            "https:",
+            "file:",
+            "env:",
+            "prop:",
+            "modulepath:",
+            "package:",
+            "projectpackage:",
+        ]
+    )
+
+
+def with_default_allowed_modules(opts: EvaluatorOptions):
+    opts.allowed_modules.extend(
+        [
+            "pkl:",
+            "repl:",
+            "file:",
+            "http:",
+            "https:",
+            "modulepath:",
+            "package:",
+            "projectpackage:",
+        ]
+    )
+
+
+def with_default_cache_dir(opts: EvaluatorOptions):
+    dirname = os.path.expanduser("~")
+    opts.cache_dir = os.path.join(dirname, ".pkl/cache")
+
+
+def with_resource_reader(reader: ResourceReader):
+    def _with_resource_reader(opts: EvaluatorOptions):
+        opts.resource_readers.append(reader)
+        opts.allowed_resources.append(reader.scheme())
+
+    return _with_resource_reader
+
+
+def with_module_reader(reader: ModuleReader):
+    def _with_module_reader(opts: EvaluatorOptions):
+        opts.module_readers.append(reader)
+        opts.allowed_modules.append(reader.scheme())
+
+    return _with_module_reader
+
+
+def with_fs(fs, scheme):
+    def _with_fs(opts: EvaluatorOptions):
+        reader = fsReader(fs=fs, scheme=scheme)
+        with_module_reader(fsModuleReader(reader))(opts)
+        with_resource_reader(fsResourceReader(reader))(opts)
+
+    return _with_fs
+
+
+def with_project_evaluator_settings(project: "Project"):
+    def _with_project_evaluator_settings(opts: EvaluatorOptions):
+        evaluator_settings = project.evaluator_settings
+        if not evaluator_settings:
+            return
+        opts.properties = evaluator_settings.external_properties
+        opts.env = evaluator_settings.env
+        opts.allowed_modules = evaluator_settings.allowed_modules
+        opts.allowed_resources = evaluator_settings.allowed_resources
+        if evaluator_settings.no_cache and evaluator_settings.no_cache:
+            opts.cache_dir = ""
+        else:
+            opts.cache_dir = evaluator_settings.module_cache_dir
+        opts.root_dir = evaluator_settings.root_dir
+
+    return _with_project_evaluator_settings
+
+
+def with_project_dependencies(project: "Project"):
+    def _with_project_dependencies(opts: EvaluatorOptions):
+        opts.project_dir = project.project_file_uri.strip("/PklProject").removeprefix(
+            "file://"
+        )
+        opts.declared_project_dependencies = project.dependencies()
+
+    return _with_project_dependencies
+
+
+def with_project(project: "Project"):
+    def _with_project(opts: EvaluatorOptions):
+        with_project_evaluator_settings(project)(opts)
+        with_project_dependencies(project)(opts)
+
+    return _with_project
+
+
+def preconfigured_options(opts: EvaluatorOptions):
+    with_default_allowed_resources(opts)
+    with_os_env(opts)
+    with_default_allowed_modules(opts)
+    with_default_cache_dir(opts)
+    opts.logger = noop_logger()

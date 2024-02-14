@@ -40,6 +40,7 @@ packages = [{ include = "pkl" }]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+u-msgpack-python = "^2.8.0"
 
 [build-system]
 requires = ["poetry-core"]

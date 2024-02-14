@@ -1,105 +1,198 @@
-package pkl
+# package pkl
 
-import (
-	"context"
+# import (
+# 	"context"
 
-	"github.com/apple/pkl-go/pkl/internal"
+# 	"github.com/apple/pkl-go/pkl/internal"
+# )
+
+# // needed for mapping Project.RawDependencies, because the value is defined as any.
+# func init() {
+# 	RegisterMapping("pkl.Project", Project{})
+# 	RegisterMapping("pkl.Project#RemoteDependency", ProjectRemoteDependency{})
+# }
+
+# // Project is the go representation of pkl.Project.
+# type Project struct {
+# 	ProjectFileUri   string                    `pkl:"projectFileUri"`
+# 	Package          *ProjectPackage           `pkl:"package"`
+# 	EvaluatorSetings *ProjectEvaluatorSettings `pkl:"evaluatorSettings"`
+# 	Tests            []string                  `pkl:"tests"`
+
+# 	// internal field; use Project.Dependencies instead.
+# 	// values are either *Project or *ProjectRemoteDependency
+# 	RawDependencies map[string]any `pkl:"dependencies"`
+
+# 	dependencies *ProjectDependencies `pkl:"-"`
+# }
+
+# // ProjectPackage is the go representation of pkl.Project#Package.
+# type ProjectPackage struct {
+# 	Name                string   `pkl:"name"`
+# 	BaseUri             string   `pkl:"baseUri"`
+# 	Version             string   `pkl:"version"`
+# 	PackageZipUrl       string   `pkl:"packageZipUrl"`
+# 	Description         string   `pkl:"description"`
+# 	Authors             []string `pkl:"authors"`
+# 	Website             string   `pkl:"website"`
+# 	Documentation       string   `pkl:"documentation"`
+# 	SourceCode          string   `pkl:"sourceCode"`
+# 	SourceCodeUrlScheme string   `pkl:"sourceCodeUrlScheme"`
+# 	License             string   `pkl:"license"`
+# 	LicenseText         string   `pkl:"licenseText"`
+# 	IssueTracker        string   `pkl:"issueTracker"`
+# 	ApiTests            []string `pkl:"apiTests"`
+# 	Exclude             []string `pkl:"exclude"`
+# 	Uri                 string   `pkl:"uri"`
+# }
+
+# // ProjectEvaluatorSettings is the Go representation of pkl.Project#EvaluatorSettings
+# type ProjectEvaluatorSettings struct {
+# 	ExternalProperties map[string]string `pkl:"externalProperties"`
+# 	Env                map[string]string `pkl:"env"`
+# 	AllowedModules     []string          `pkl:"allowedModules"`
+# 	AllowedResources   []string          `pkl:"allowedResources"`
+# 	NoCache            *bool             `pkl:"noCache"`
+# 	ModulePath         []string          `pkl:"modulePath"`
+# 	Timeout            Duration          `pkl:"timeout"`
+# 	ModuleCacheDir     string            `pkl:"moduleCacheDir"`
+# 	RootDir            string            `pkl:"rootDir"`
+# }
+
+# func (project *Project) Dependencies() *ProjectDependencies {
+# 	if project.dependencies == nil {
+# 		var deps ProjectDependencies
+# 		deps.LocalDependencies = make(map[string]*ProjectLocalDependency)
+# 		deps.RemoteDependencies = make(map[string]*ProjectRemoteDependency)
+# 		for name, dep := range project.RawDependencies {
+# 			if proj, ok := dep.(*Project); ok {
+# 				localDep := &ProjectLocalDependency{
+# 					PackageUri:     proj.Package.Uri,
+# 					ProjectFileUri: proj.ProjectFileUri,
+# 					Dependencies:   proj.Dependencies(),
+# 				}
+# 				deps.LocalDependencies[name] = localDep
+# 				continue
+# 			}
+# 			if remoteDep, ok := dep.(*ProjectRemoteDependency); ok {
+# 				deps.RemoteDependencies[name] = remoteDep
+# 				continue
+# 			}
+# 			// If we get here, the most likely explanation is that a Project was manually
+# 			// initialized and RawDependencies was set incorrectly.
+# 			internal.Debug("Invalid dependency type: %+v", dep)
+# 		}
+# 		project.dependencies = &deps
+# 	}
+# 	return project.dependencies
+# }
+
+# // LoadProject loads a project definition from the specified path directory.
+# func LoadProject(context context.Context, path string) (*Project, error) {
+# 	ev, err := NewEvaluator(context, PreconfiguredOptions)
+# 	if err != nil {
+# 		return nil, err
+# 	}
+# 	return LoadProjectFromEvaluator(context, ev, path)
+# }
+
+# func LoadProjectFromEvaluator(context context.Context, ev Evaluator, path string) (*Project, error) {
+# 	var proj Project
+# 	if err := ev.EvaluateOutputValue(context, FileSource(path), &proj); err != nil {
+# 		return nil, err
+# 	}
+# 	return &proj, nil
+# }
+from __future__ import annotations
+
+import dataclasses
+from typing import TYPE_CHECKING, Any
+
+import pkl.internal as internal
+from pkl.evaluator_options import (
+    ProjectDependencies,
+    ProjectLocalDependency,
+    ProjectRemoteDependency,
 )
+from pkl.schema import register_mapping
 
-// needed for mapping Project.RawDependencies, because the value is defined as any.
-func init() {
-	RegisterMapping("pkl.Project", Project{})
-	RegisterMapping("pkl.Project#RemoteDependency", ProjectRemoteDependency{})
-}
+if TYPE_CHECKING:
+    from pkl.values import Duration
 
-// Project is the go representation of pkl.Project.
-type Project struct {
-	ProjectFileUri   string                    `pkl:"projectFileUri"`
-	Package          *ProjectPackage           `pkl:"package"`
-	EvaluatorSetings *ProjectEvaluatorSettings `pkl:"evaluatorSettings"`
-	Tests            []string                  `pkl:"tests"`
 
-	// internal field; use Project.Dependencies instead.
-	// values are either *Project or *ProjectRemoteDependency
-	RawDependencies map[string]any `pkl:"dependencies"`
+@dataclasses.dataclass
+class Project:
+    project_file_uri: str
+    package: "ProjectPackage"
+    evaluator_settings: "ProjectEvaluatorSettings"
+    tests: list[str]
+    raw_dependencies: dict[str, Any]
 
-	dependencies *ProjectDependencies `pkl:"-"`
-}
+    _dependencies: "ProjectDependencies | None" = None
 
-// ProjectPackage is the go representation of pkl.Project#Package.
-type ProjectPackage struct {
-	Name                string   `pkl:"name"`
-	BaseUri             string   `pkl:"baseUri"`
-	Version             string   `pkl:"version"`
-	PackageZipUrl       string   `pkl:"packageZipUrl"`
-	Description         string   `pkl:"description"`
-	Authors             []string `pkl:"authors"`
-	Website             string   `pkl:"website"`
-	Documentation       string   `pkl:"documentation"`
-	SourceCode          string   `pkl:"sourceCode"`
-	SourceCodeUrlScheme string   `pkl:"sourceCodeUrlScheme"`
-	License             string   `pkl:"license"`
-	LicenseText         string   `pkl:"licenseText"`
-	IssueTracker        string   `pkl:"issueTracker"`
-	ApiTests            []string `pkl:"apiTests"`
-	Exclude             []string `pkl:"exclude"`
-	Uri                 string   `pkl:"uri"`
-}
+    @property
+    def dependencies(self):
+        if self._dependencies is None:
+            deps = ProjectDependencies(
+                local_dependencies={},
+                remote_dependencies={},
+            )
+            for name, dep in self.raw_dependencies.items():
+                if isinstance(dep, Project):
+                    local_dep = ProjectLocalDependency(
+                        package_uri=dep.package.uri,
+                        project_file_uri=dep.project_file_uri,
+                        dependencies=dep.dependencies,
+                    )
+                    deps.local_dependencies[name] = local_dep
+                    continue
+                if isinstance(dep, ProjectRemoteDependency):
+                    deps.remote_dependencies[name] = dep
+                    continue
+                # If we get here, the most likely explanation is that a Project was manually
+                # initialized and RawDependencies was set incorrectly.
+                internal.debug("Invalid dependency type: %+v", dep)
+            self.dependencies = deps
+        return self.dependencies
 
-// ProjectEvaluatorSettings is the Go representation of pkl.Project#EvaluatorSettings
-type ProjectEvaluatorSettings struct {
-	ExternalProperties map[string]string `pkl:"externalProperties"`
-	Env                map[string]string `pkl:"env"`
-	AllowedModules     []string          `pkl:"allowedModules"`
-	AllowedResources   []string          `pkl:"allowedResources"`
-	NoCache            *bool             `pkl:"noCache"`
-	ModulePath         []string          `pkl:"modulePath"`
-	Timeout            Duration          `pkl:"timeout"`
-	ModuleCacheDir     string            `pkl:"moduleCacheDir"`
-	RootDir            string            `pkl:"rootDir"`
-}
+    @dependencies.setter
+    def dependencies(self, value):
+        self._dependencies = value
 
-func (project *Project) Dependencies() *ProjectDependencies {
-	if project.dependencies == nil {
-		var deps ProjectDependencies
-		deps.LocalDependencies = make(map[string]*ProjectLocalDependency)
-		deps.RemoteDependencies = make(map[string]*ProjectRemoteDependency)
-		for name, dep := range project.RawDependencies {
-			if proj, ok := dep.(*Project); ok {
-				localDep := &ProjectLocalDependency{
-					PackageUri:     proj.Package.Uri,
-					ProjectFileUri: proj.ProjectFileUri,
-					Dependencies:   proj.Dependencies(),
-				}
-				deps.LocalDependencies[name] = localDep
-				continue
-			}
-			if remoteDep, ok := dep.(*ProjectRemoteDependency); ok {
-				deps.RemoteDependencies[name] = remoteDep
-				continue
-			}
-			// If we get here, the most likely explanation is that a Project was manually
-			// initialized and RawDependencies was set incorrectly.
-			internal.Debug("Invalid dependency type: %+v", dep)
-		}
-		project.dependencies = &deps
-	}
-	return project.dependencies
-}
 
-// LoadProject loads a project definition from the specified path directory.
-func LoadProject(context context.Context, path string) (*Project, error) {
-	ev, err := NewEvaluator(context, PreconfiguredOptions)
-	if err != nil {
-		return nil, err
-	}
-	return LoadProjectFromEvaluator(context, ev, path)
-}
+@dataclasses.dataclass
+class ProjectPackage:
+    name: str
+    base_uri: str
+    version: str
+    package_zip_url: str
+    description: str
+    authors: list[str]
+    website: str
+    documentation: str
+    source_code: str
+    source_code_url_scheme: str
+    license: str
+    license_text: str
+    issue_tracker: str
+    api_tests: list[str]
+    exclude: list[str]
+    uri: str
 
-func LoadProjectFromEvaluator(context context.Context, ev Evaluator, path string) (*Project, error) {
-	var proj Project
-	if err := ev.EvaluateOutputValue(context, FileSource(path), &proj); err != nil {
-		return nil, err
-	}
-	return &proj, nil
-}
+
+@dataclasses.dataclass
+class ProjectEvaluatorSettings:
+    external_properties: dict[str, str]
+    env: dict[str, str]
+    allowed_modules: list[str]
+    allowed_resources: list[str]
+    no_cache: bool
+    module_path: list[str]
+    timeout: Duration
+    module_cache_dir: str
+    root_dir: str
+
+
+def init():
+    register_mapping("pkl.Project", Project)
+    register_mapping("pkl.Project#RemoteDependency", ProjectRemoteDependency)

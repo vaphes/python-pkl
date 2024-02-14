@@ -49,3 +49,38 @@
 
 # // NoopLogger is a logger that discards all messages.
 # var NoopLogger = NewLogger(io.Discard)
+
+
+import dataclasses
+import sys
+from typing import TextIO
+
+
+@dataclasses.dataclass
+class Logger:
+    out: TextIO | None
+
+    def trace(self, message: str, frame_uri: str):
+        if self.out is None:
+            return
+        self.out.write(self.format_log_message("TRACE", message, frame_uri))
+
+    def warn(self, message: str, frame_uri: str):
+        if self.out is None:
+            return
+        self.out.write(self.format_log_message("WARN", message, frame_uri))
+
+    def format_log_message(self, level: str, message: str, frame_uri: str):
+        return f"pkl: {level}: {message} ({frame_uri})\n"
+
+
+def new_logger(out: TextIO | None):
+    return Logger(out)
+
+
+def stderr_logger():
+    return new_logger(sys.stderr)
+
+
+def noop_logger():
+    return new_logger(None)

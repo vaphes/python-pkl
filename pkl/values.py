@@ -272,3 +272,154 @@
 # 		return Bytes, fmt.Errorf("unrecognized DataSize unit: `%s`", str)
 # 	}
 # }
+
+import dataclasses
+import datetime
+import enum
+from typing import Any
+
+
+@dataclasses.dataclass
+class Object:
+    module_uri: str
+    name: str
+    properties: dict[str, Any]
+    entries: dict[Any, Any]
+    elements: list[Any]
+
+
+@dataclasses.dataclass
+class Pair[A: Any, B: Any]:
+    first: A
+    second: B
+
+
+@dataclasses.dataclass
+class Regex:
+    pattern: str
+
+
+@dataclasses.dataclass
+class Class:
+    pass
+
+
+@dataclasses.dataclass
+class TypeAlias:
+    pass
+
+
+@dataclasses.dataclass
+class IntSeq:
+    start: int
+    end: int
+    step: int
+
+
+class DurationUnit(enum.Enum):
+    MICROSECOND = 1
+    MILLISECOND = MICROSECOND.value * 1000
+    SECOND = MILLISECOND.value * 1000
+    MINUTE = SECOND.value * 60
+    HOUR = MINUTE.value * 60
+    DAY = HOUR.value * 24
+
+    def __str__(self):
+        try:
+            return {
+                DurationUnit.MICROSECOND: "us",
+                DurationUnit.MILLISECOND: "ms",
+                DurationUnit.SECOND: "s",
+                DurationUnit.MINUTE: "min",
+                DurationUnit.HOUR: "h",
+                DurationUnit.DAY: "d",
+            }[self]
+        except Exception:
+            return "<invalid>"
+
+
+def to_duration_unit(unit: str) -> DurationUnit:
+    match unit:
+        case "us":
+            return DurationUnit.MICROSECOND
+        case "ms":
+            return DurationUnit.MILLISECOND
+        case "s":
+            return DurationUnit.SECOND
+        case "min":
+            return DurationUnit.MINUTE
+        case "h":
+            return DurationUnit.HOUR
+        case "d":
+            return DurationUnit.DAY
+        case _:
+            raise ValueError(f"unrecognized Duration unit: `{unit}`")
+
+
+@dataclasses.dataclass
+class Duration:
+    value: float
+    unit: DurationUnit
+
+    def python_duration(self):
+        return datetime.timedelta(microseconds=self.value * float(self.unit.value))
+
+
+class DataSizeUnit(enum.Enum):
+    BYTE = 1
+    KILOBYTE = 1000
+    KIBIBYTE = 1024
+    MEGABYTE = KILOBYTE.value * 1000
+    MEBIBYTE = KIBIBYTE.value * 1024
+    GIGABYTE = MEGABYTE.value * 1000
+    GIBIBYTE = MEBIBYTE.value * 1024
+    TERABYTE = GIGABYTE.value * 1000
+    TEBIBYTE = GIBIBYTE.value * 1024
+    PETABYTE = TERABYTE.value * 1000
+    PEBIBYTE = TEBIBYTE.value * 1024
+
+    def __str__(self):
+        try:
+            return {
+                DataSizeUnit.BYTE: "b",
+                DataSizeUnit.KILOBYTE: "kb",
+                DataSizeUnit.KIBIBYTE: "kib",
+                DataSizeUnit.MEGABYTE: "mb",
+                DataSizeUnit.MEBIBYTE: "mib",
+                DataSizeUnit.GIGABYTE: "gb",
+                DataSizeUnit.GIBIBYTE: "gib",
+                DataSizeUnit.TERABYTE: "tb",
+                DataSizeUnit.TEBIBYTE: "tib",
+                DataSizeUnit.PETABYTE: "pb",
+                DataSizeUnit.PEBIBYTE: "pib",
+            }[self]
+        except Exception:
+            return "<invalid>"
+
+
+def to_data_size_unit(unit: str) -> DataSizeUnit:
+    match unit:
+        case "b":
+            return DataSizeUnit.BYTE
+        case "kb":
+            return DataSizeUnit.KILOBYTE
+        case "kib":
+            return DataSizeUnit.KIBIBYTE
+        case "mb":
+            return DataSizeUnit.MEGABYTE
+        case "mib":
+            return DataSizeUnit.MEBIBYTE
+        case "gb":
+            return DataSizeUnit.GIGABYTE
+        case "gib":
+            return DataSizeUnit.GIBIBYTE
+        case "tb":
+            return DataSizeUnit.TERABYTE
+        case "tib":
+            return DataSizeUnit.TEBIBYTE
+        case "pb":
+            return DataSizeUnit.PETABYTE
+        case "pib":
+            return DataSizeUnit.PEBIBYTE
+        case _:
+            raise ValueError(f"unrecognized DataSize unit: `{unit}`")
