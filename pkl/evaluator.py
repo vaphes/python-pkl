@@ -284,3 +284,58 @@
 # func (rcv *simpleEvaluator) Close() error {
 # 	return rcv.manager.Close()
 # }
+
+import dataclasses
+
+
+@dataclasses.dataclass:
+class Evaluator:
+    evaluatorId: int
+    logger: Logger
+    manager: EvaluatorManager
+    pendingRequests: dict
+    closed: bool
+    resourceReaders: list
+    moduleReaders: list
+
+    def EvaluateModule(self, ctx, source, out):
+        pass
+
+    def EvaluateOutputText(self, ctx, source):
+        pass
+
+    def EvaluateOutputValue(self, ctx, source, out):
+        pass
+
+    def EvaluateOutputFiles(self, ctx, source):
+        pass
+
+    def EvaluateExpression(self, ctx, source, expr, out):
+        pass
+
+    def EvaluateExpressionRaw(self, ctx, source, expr):
+        pass
+
+    def Close(self):
+        pass
+
+    def Closed(self):
+        pass
+
+    def handleEvaluateResponse(self, resp):
+        pass
+
+    def handleLog(self, resp):
+        pass
+
+    def handleReadResource(self, msg):
+        pass
+
+    def handleReadModule(self, msg):
+        pass
+
+    def handleListResources(self, msg):
+        pass
+
+    def handleListModules(self, msg):
+        pass

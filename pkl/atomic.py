@@ -65,7 +65,7 @@ class AtomicRandom:
     )
     mutex: threading.Lock = dataclasses.field(default_factory=threading.Lock)
 
-    def Int63(self):
+    def int_63(self):
         with self.mutex:
             return self.rand.randint(0, 2**63 - 1)
 

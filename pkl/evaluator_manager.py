@@ -275,3 +275,18 @@
 # 	}
 # 	return derr
 # }
+
+import dataclasses
+
+from pkl.atomic import AtomicBool
+
+
+@dataclasses.dataclass
+class EvaluatorManager:
+    impl: "EvaluatorManagerImpl"
+    interrupts: dict
+    evaluators: dict
+    pending_evaluators: dict
+    closed: AtomicBool
+    new_evaluator_mutex: "Mutex"
+    initialized: bool

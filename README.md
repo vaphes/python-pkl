@@ -10,5 +10,5 @@ THIS IS A WORK IN PROGRESS
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install Python Pkl Lang.
 
 ```bash
-pip install python-pkl-lang
+pip install python-pkl
 ```
