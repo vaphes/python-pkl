@@ -287,8 +287,11 @@
 
 import dataclasses
 
+from pkl.evaluator_manager import EvaluatorManager
+from pkl.logger import Logger
 
-@dataclasses.dataclass:
+
+@dataclasses.dataclass
 class Evaluator:
     evaluatorId: int
     logger: Logger
@@ -298,44 +301,188 @@ class Evaluator:
     resourceReaders: list
     moduleReaders: list
 
-    def EvaluateModule(self, ctx, source, out):
-        pass
+    def evaluate_module(self, ctx, source, out):
+        return self.evaluate_expression(ctx, source, "", out)
 
-    def EvaluateOutputText(self, ctx, source):
-        pass
+    def evaluate_output_text(self, ctx, source):
+        out = ""
+        err = self.evaluate_expression(ctx, source, "output.text", out)
+        return out, err
 
-    def EvaluateOutputValue(self, ctx, source, out):
-        pass
+    def evaluate_output_value(self, ctx, source, out):
+        return self.evaluate_expression(ctx, source, "output.value", out)
 
-    def EvaluateOutputFiles(self, ctx, source):
-        pass
+    def evaluate_output_files(self, ctx, source):
+        out = {}
+        err = self.evaluate_expression(
+            ctx, source, "output.files.toMap().mapValues((_, it) -> it.text)", out
+        )
+        return out, err
 
-    def EvaluateExpression(self, ctx, source, expr, out):
-        pass
+    def evaluate_expression(self, ctx, source, expr, out):
+        bytes, err = self.evaluate_expression_raw(ctx, source, expr)
+        if err:
+            return err
+        return self.unmarshal(bytes, out)
 
-    def EvaluateExpressionRaw(self, ctx, source, expr):
-        pass
+    def evaluate_expression_raw(self, ctx, source, expr):
+        if self.closed:
+            return None, "evaluator is closed"
+        request_id = random.randint(0, 1000000000)
+        ch = {}
+        self.pendingRequests[request_id] = ch
+        interrupted, nevermind = self.manager.interrupted(self.evaluatorId)
+        e.manager.impl.out_chan() < -{
+            "RequestId": request_id,
+            "ModuleUri": source.uri.string(),
+            "ModuleText": source.contents,
+            "Expr": expr,
+            "EvaluatorId": self.evaluatorId,
+        }
+        if ctx.done():
+            return None, None
+        if interrupted:
+            return None, interrupted
+        if ch:
+            if ch["Error"]:
+                return None, ch["Error"]
+            return ch["Result"], None
 
-    def Close(self):
-        pass
+    def close(self):
+        if self.closed:
+            return None
+        self.manager.close_evaluator(self)
+        return None
 
-    def Closed(self):
-        pass
+    def closed(self):
+        return self.closed
 
-    def handleEvaluateResponse(self, resp):
-        pass
+    def handle_evaluate_response(self, resp):
+        c = self.pendingRequests[resp["RequestId"]]
+        if not c:
+            print(
+                "warn: received a message for an unknown request id:", resp["RequestId"]
+            )
+            return
+        ch = c
+        ch < -resp
+        ch.close()
+        self.pendingRequests.pop(resp["RequestId"])
 
-    def handleLog(self, resp):
-        pass
+    def handle_log(self, resp):
+        if resp["Level"] == 0:
+            self.logger.trace(resp["Message"], resp["FrameUri"])
+        elif resp["Level"] == 1:
+            self.logger.warn(resp["Message"], resp["FrameUri"])
+        else:
+            raise Exception(f"unknown log level: {resp['Level']}")
 
-    def handleReadResource(self, msg):
-        pass
+    def handle_read_resource(self, msg):
+        response = {"EvaluatorId": self.evaluatorId, "RequestId": msg["RequestId"]}
+        u = url.parse(msg["Uri"])
+        if not u:
+            response["Error"] = f"internal error: failed to parse resource url: {u}"
+            self.manager.impl.out_chan() < -response
+            return
+        reader = None
+        for r in self.resourceReaders:
+            if r.scheme() == u.scheme:
+                reader = r
+                break
+        if not reader:
+            response["Error"] = f"No resource reader found for scheme `{u.scheme}`"
+            self.manager.impl.out_chan() < -response
+            return
+        contents, err = reader.read(u)
+        response["Contents"] = contents
+        if err:
+            response["Error"] = err
+        self.manager.impl.out_chan() < -response
 
-    def handleReadModule(self, msg):
-        pass
+    def handle_read_module(self, msg):
+        response = {"EvaluatorId": self.evaluatorId, "RequestId": msg["RequestId"]}
+        u = url.parse(msg["Uri"])
+        if not u:
+            response["Error"] = f"internal error: failed to parse resource url: {u}"
+            self.manager.impl.out_chan() < -response
+            return
+        reader = None
+        for r in self.moduleReaders:
+            if r.scheme() == u.scheme:
+                reader = r
+                break
+        if not reader:
+            response["Error"] = f"No module reader found for scheme `{u.scheme}`"
+            self.manager.impl.out_chan() < -response
+            return
+        response["Contents"], err = reader.read(u)
+        if err:
+            response["Error"] = err
+        self.manager.impl.out_chan() < -response
 
-    def handleListResources(self, msg):
-        pass
+    def handle_list_resources(self, msg):
+        response = {"EvaluatorId": self.evaluatorId, "RequestId": msg["RequestId"]}
+        u = url.parse(msg["Uri"])
+        if not u:
+            response["Error"] = f"internal error: failed to parse resource url: {u}"
+            self.manager.impl.out_chan() < -response
+            return
+        reader = None
+        for r in self.resourceReaders:
+            if r.scheme() == u.scheme:
+                reader = r
+                break
+        if not reader:
+            response["Error"] = f"No resource reader found for scheme `{u.scheme}`"
+            self.manager.impl.out_chan() < -response
+            return
+        path_elements, err = reader.list_elements(u)
+        if err:
+            response["Error"] = err
+        else:
+            for path_element in path_elements:
+                response["PathElements"].append(
+                    {
+                        "Name": path_element.name(),
+                        "IsDirectory": path_element.is_directory(),
+                    }
+                )
+        self.manager.impl.out_chan() < -response
 
-    def handleListModules(self, msg):
-        pass
+    def handle_list_modules(self, msg):
+        response = {"EvaluatorId": self.evaluatorId, "RequestId": msg["RequestId"]}
+        u = url.parse(msg["Uri"])
+        if not u:
+            response["Error"] = f"internal error: failed to parse resource url: {u}"
+            self.manager.impl.out_chan() < -response
+            return
+        reader = None
+        for r in self.moduleReaders:
+            if r.scheme() == u.scheme:
+                reader = r
+                break
+        if not reader:
+            response["Error"] = f"No module reader found for scheme `{u.scheme}`"
+            self.manager.impl.out_chan() < -response
+            return
+        path_elements, err = reader.list_elements(u)
+        if err:
+            response["Error"] = err
+        else:
+            for path_element in path_elements:
+                response["PathElements"].append(
+                    {
+                        "Name": path_element.name(),
+                        "IsDirectory": path_element.is_directory(),
+                    }
+                )
+        self.manager.impl.out_chan() < -response
+
+
+@dataclasses.dataclass
+class SimpleEvaluator:
+    Evaluator: Evaluator
+    manager: EvaluatorManager
+
+    def close(self):
+        return self.manager.close()
