@@ -59,12 +59,12 @@
 # var _ Evaluator = (*evaluator)(nil)
 
 # func (e *evaluator) EvaluateModule(ctx context.Context, source *ModuleSource, out any) error {
-# 	return e.EvaluateExpression(ctx, source, "", out)
+# 	return e.EvaluateExpression( source, "", out)
 # }
 
 # func (e *evaluator) EvaluateOutputText(ctx context.Context, source *ModuleSource) (string, error) {
 # 	var out string
-# 	err := e.EvaluateExpression(ctx, source, "output.text", &out)
+# 	err := e.EvaluateExpression( source, "output.text", &out)
 # 	return out, err
 # }
 
@@ -289,43 +289,43 @@ import dataclasses
 
 from pkl.evaluator_manager import EvaluatorManager
 from pkl.logger import Logger
+from pkl.module_source import ModuleSource
+from pkl.reader import ModuleReader, ResourceReader
 
 
 @dataclasses.dataclass
 class Evaluator:
-    evaluatorId: int
-    logger: Logger
     manager: EvaluatorManager
-    pendingRequests: dict
-    closed: bool
-    resourceReaders: list
-    moduleReaders: list
+    evaluator_id: int
+    resource_readers: list[ResourceReader]
+    module_readers: list[ModuleReader]
+    logger: Logger
 
-    def evaluate_module(self, ctx, source, out):
-        return self.evaluate_expression(ctx, source, "", out)
+    def evaluate_module(self, source: ModuleSource, out):
+        return self.evaluate_expression(source, "", out)
 
-    def evaluate_output_text(self, ctx, source):
+    def evaluate_output_text(self, source):
         out = ""
-        err = self.evaluate_expression(ctx, source, "output.text", out)
+        err = self.evaluate_expression(source, "output.text", out)
         return out, err
 
-    def evaluate_output_value(self, ctx, source, out):
-        return self.evaluate_expression(ctx, source, "output.value", out)
+    def evaluate_output_value(self, source, out):
+        return self.evaluate_expression(source, "output.value", out)
 
-    def evaluate_output_files(self, ctx, source):
+    def evaluate_output_files(self, source):
         out = {}
         err = self.evaluate_expression(
-            ctx, source, "output.files.toMap().mapValues((_, it) -> it.text)", out
+            source, "output.files.toMap().mapValues((_, it) -> it.text)", out
         )
         return out, err
 
-    def evaluate_expression(self, ctx, source, expr, out):
-        bytes, err = self.evaluate_expression_raw(ctx, source, expr)
+    def evaluate_expression(self, source, expr, out):
+        bytes, err = self.evaluate_expression_raw(source, expr)
         if err:
             return err
         return self.unmarshal(bytes, out)
 
-    def evaluate_expression_raw(self, ctx, source, expr):
+    def evaluate_expression_raw(self, source, expr):
         if self.closed:
             return None, "evaluator is closed"
         request_id = random.randint(0, 1000000000)
@@ -351,7 +351,7 @@ class Evaluator:
     def close(self):
         if self.closed:
             return None
-        self.manager.close_evaluator(self)
+        self.manager.close_evaluator(self.evaluator_id)
         return None
 
     def closed(self):

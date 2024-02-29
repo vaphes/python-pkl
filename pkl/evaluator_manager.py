@@ -51,6 +51,23 @@
 # 	initialized       bool
 # }
 
+
+import dataclasses
+
+from pkl.atomic import AtomicBool
+
+
+@dataclasses.dataclass
+class EvaluatorManager:
+    impl: "EvaluatorManagerImpl"
+    interrupts: dict
+    evaluators: dict
+    pending_evaluators: dict
+    closed: AtomicBool
+    new_evaluator_mutex: "Mutex"
+    initialized: bool
+
+
 # // evaluatorManagerImpl is the underlying implementation of the manager. It defines the logic
 # // behind setup and teardown routines, and provides channels for incoming/outgoing messages and
 # // out-of-band closes.
@@ -275,18 +292,3 @@
 # 	}
 # 	return derr
 # }
-
-import dataclasses
-
-from pkl.atomic import AtomicBool
-
-
-@dataclasses.dataclass
-class EvaluatorManager:
-    impl: "EvaluatorManagerImpl"
-    interrupts: dict
-    evaluators: dict
-    pending_evaluators: dict
-    closed: AtomicBool
-    new_evaluator_mutex: "Mutex"
-    initialized: bool
